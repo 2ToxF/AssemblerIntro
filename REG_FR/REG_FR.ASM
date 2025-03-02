@@ -7,17 +7,17 @@ locals @@
 VIDEOSEG	equ 0b800h					; Start of video segment
 
 TEXTLINELEN	equ 7d						; Length of one text line of frame
-TEXTLINENUM equ 4d						; Number of lines in text of frame
+TEXTLINENUM equ 13d						; Number of lines in text of frame
 
 FRAMESTART	equ 2d*80d*2d + 65d*2d		; Left upper corner of the frame
 FRAMECOLUM	equ TEXTLINELEN + 4d		; Number of frame columns with edges (width)
 FRAMEROW	equ TEXTLINENUM + 2d		; Number of frame rows with edges (height)
-FRAMESHFT	equ 7d						; To move to next register field in buffer
 FRAMESIZE	equ FRAMECOLUM*FRAMEROW*2d	; Size of registers frame
 
-FRAMECOLOR	equ byte ptr 08h			; Color of the frame
+FRAMECOLOR	equ byte ptr 0ch			; Color of the frame
 
-SCREENSHFT	equ 80d*2d - FRAMECOLUM*2		; Value to move to next line from the end of current
+SCREENSHFT	equ 80d*2d - FRAMECOLUM*2	; Value to move to next line from the end of current
+BUFFERSHIFT	equ (FRAMECOLUM - 4d)*2		; To move to next register value in buffer
 
 HOTKEY		equ byte ptr 29h			; Scan code of '~'
 CTRLMASK	equ byte ptr 04h			; Mask for ctrl
@@ -62,11 +62,6 @@ Start:
 			mov es:[bx+2], ax			; Set new 09h segment
 			sti							; Turn on interrupts
 
-			; mov al, FlagTurnOn
-			; inc al
-			; mov FlagTurnOn, al
-			; call My08Int				; DEBUG
-
 			; Terminate and stay resident
 			mov ax, 3100h				; Set TSR-func
 			mov dx, offset EndOfCode	; Set length of code to stay
@@ -84,9 +79,17 @@ Start:
 ;---------------------------------------------------------------
 My09Int		proc
 
-			push ax di es			; SAVE ax di es
+			push ax cx dx ds si es di	; SAVE AX CX DX DS DI ES DI
 
-			;!!!{Проверка ввода} - выполнено
+			push cs
+			pop ds					; DS = CS (to access variables)
+			mov ax, VIDEOSEG
+			mov es, ax				; ES = VIDEOSEG
+
+			mov cx, FRAMECOLUM
+			mov dx, FRAMEROW
+			mov di, FRAMESTART		; Set params for drawing and saving buffers
+
 			mov ah, 02h
 			int 16h					; Put flags in AL to check ctrl and shift
 			cmp al, CTRLMASK
@@ -101,16 +104,25 @@ My09Int		proc
 			and al, 01h
 			mov FlagTurnOn, al		; FlagTurnOn = (FlagTurnOn + 1) % 2
 
-			; mov ax, VIDEOSEG
-			; mov es, ax
-			; mov ax, 4e00h + 'W'
-			; xor bx, bx
-			; mov es:[bx], ax			; DEBUG
-			;!!!{Подмена буферов}
+			cmp FlagTurnOn, 00h
+			jz @@FrameIsOff			; if (FlagTurnOn != 0) {save screen and draw FrameBuffer}
+		   ;{
+		    mov si, offset OldScreenBuffer
+			push cx dx di			; SAVE CX DX DI
+			call SaveBuffer
+			pop di dx cx			; LOAD DI DX CX
+			mov si, offset FrameBuffer
+			call DrawBuffer
+			jmp @@EndIfTurnOn
+		   ;}
+@@FrameIsOff:						; else {draw OldScreenBuffer}
+		   ;{
+			mov si, offset OldScreenBuffer
+			call DrawBuffer
+		   ;}
+@@EndIfTurnOn:
 
-			jmp ChainOld09			; Chain to old Interrupt Service Routine
-
-ChainOld09: pop es di ax			; LOAD es di ax
+ChainOld09: pop di es si ds dx cx ax	; LOAD DI ES SI DS DX CX AX
 			db 0eah					; <=> jmp
 Old09Ofs	dw 0
 Old09Seg	dw 0					; 0000:0000 (but it will be changed earlier)
@@ -127,17 +139,10 @@ Old09Seg	dw 0					; 0000:0000 (but it will be changed earlier)
 ;---------------------------------------------------------------
 My08Int		proc
 
-			push es ds di si dx cx bx ax	; SAVE all* registers
+			push bp sp ss di es si ds dx cx bx ax	; SAVE all* registers
 
-			; mov dl, FlagTurnOn
-			; inc dl
-			; mov ah, 02h
-			; int 21h					; DEBUG
-
-			; mov dl, FlagInited
-			; inc dl
-			; mov ah, 02h
-			; int 21h					; DEBUG
+			push cs
+			pop ds					; DS = CS (to access variables)
 
 			mov al, FlagTurnOn
 			cmp al, 00h
@@ -150,19 +155,11 @@ My08Int		proc
 			inc al
 			mov FlagInited, al		; ++FlagInited
 
-			; mov ax, VIDEOSEG
-			; mov es, ax
-			; mov ax, 5e00h + 'W'
-			; xor bx, bx
-			; mov es:[bx], ax			; DEBUG
-
-			;!!!{Инициализировать буфер для рамки} - выполнено?
-			push cs
-			pop ds					; DS = CS
 			push cs
 			pop es					; ES = CS
 
 			mov ah, FRAMECOLOR
+			mov bx, offset RegsZeroLabel
 			mov cx, TEXTLINELEN
 			mov dx, TEXTLINENUM
 			mov si, offset FrameSample
@@ -170,9 +167,18 @@ My08Int		proc
 			call InitFrame			; Set frame params and initialize
 		   ;}
 @@FrameInited:
-			;!!!{Поменять значения регистров в буфере}
+			push cs
+			pop es					; ES = CS
+			push ss
+			pop ds					; DS = SS
 
-			;!!!{Вывести рамку на экран}
+			mov cx, 13				; 13 registers to update
+			mov si, sp
+			mov di, offset FrameBuffer
+			add di, (FRAMECOLUM + 5)*2	; Skip one line and first characters in buffer
+
+			call ChangeRegs			; Set buffer and stack params and change registers values in buffer
+
 			push cs
 			pop ds					; DS = CS
 			mov ax, VIDEOSEG
@@ -183,11 +189,9 @@ My08Int		proc
 			mov si, offset FrameBuffer
 
 			mov di, FRAMESTART
-			call DrawBuffer			; Set buffer aand screen params and initialize
+			call DrawBuffer			; Set buffer and screen params and draw buffer
 
-			jmp ChainOld08
-
-ChainOld08:	pop ax bx cx dx si di ds es   ; LOAD all* registers
+ChainOld08:	pop ax bx cx dx ds si es di ss sp bp	; LOAD all* registers
 			db 0eah					; <=> jmp
 Old08Ofs	dw 0
 Old08Seg	dw 0					; 0000:0000 (but it will be changed earlier)
@@ -198,13 +202,124 @@ Old08Seg	dw 0					; 0000:0000 (but it will be changed earlier)
 
 ;---------------------------------------------------------------
 ; Change registers in buffer
-; Entry:	CX		= number of register
+; Entry:	CX		= number of registers
 ;			DS:SI	= pointer to stack where real registers are
 ;			ES:DI	= buffer
 ; Exit:		buffer with new registers
-; Destr:	...
+; Destr:	AX
 ;---------------------------------------------------------------
 ChangeRegs	proc
+
+@@NextReg:	mov ax, ds:[si]			; Load register from stack
+
+			call NumberToHex
+
+			add si, 2				; Go to next register (+ 2 bytes)
+			add di, BUFFERSHIFT		; Go to next register value in buffer
+			loop @@NextReg			; Do CX times
+
+@@Exit:		ret
+			endp
+
+
+;---------------------------------------------------------------
+; Convert 4 bits (hex-digit) to ascii (hex)
+; Entry:	AL	= digit to convert (0d <= Al <= 15d)
+; Exit:		AL	= digit in ascii (hex)
+; Destr:	none
+;---------------------------------------------------------------
+DigitToHex	proc
+
+			add al, '0'			; Convert decimal digit
+			cmp al, '9'
+			jbe @@Exit
+
+			add al, 'A' - '9' - 1	; if (al > '9') al += 'A' - '9' - 1
+
+@@Exit:		ret
+			endp
+
+
+;---------------------------------------------------------------
+; Convert 1 byte (2 hex digits) to ascii (hex)
+; Entry:	AL 		= byte to convert
+;			ES:DI	= buffer to put digits
+; Exit:		string with converted byte
+;			DI 		= DI + 4
+; Destr:	AH
+;---------------------------------------------------------------
+ByteToHex	proc
+
+			mov ah, al
+
+			shr al, 4			; First goes most significant digit
+			call DigitToHex		; Convert digit to ascii (hex)
+			stosb				; Put hex in buffer
+			inc di				; Skip color attr
+
+			mov al, ah
+			and al, 0fh			; Now least significant digit
+			call DigitToHex		; Convert digit to ascii (hex)
+			stosb				; Put hex in buffer
+			inc di				; Skip color attr
+
+@@Exit:		ret
+			endp
+
+
+;---------------------------------------------------------------
+; Convert number (4 hex digits) to ascii (hex)
+; Entry:	AX 		= number to convert
+;			ES:DI	= buffer to put digits
+; Exit:		string with converted byte
+;			DI 		= DI + 4
+; Destr:	none
+;---------------------------------------------------------------
+NumberToHex	proc
+
+			xchg ah, al			; First goes most significant digit
+			push ax				; SAVE AX
+			call ByteToHex		; Convert and put in buffer
+			pop ax				; LOAD AX
+
+			xchg ah, al			; Now least significant digit
+			push ax				; SAVE AX
+			call ByteToHex		; Convert and put in buffer
+			pop ax				; LOAD AX
+
+@@Exit:		ret
+			endp
+
+
+;---------------------------------------------------------------
+; Save part of screen in buffer
+; Entry:	CX		= width of frame
+;			DX		= height of frame
+;			DS:SI	= buffer where to save
+;			ES:DI	= begin of screen
+;
+; Exit:		CX		= 0
+;			DX		= 0
+;			SI		= SI + CX*DX
+;
+; Destr:	DI
+;---------------------------------------------------------------
+SaveBuffer	proc
+
+
+@@NextLine:	push cx			; SAVE CX
+@@NextChar:	mov ax, es:[di]	; Save character and move to next
+			add di, 2
+
+			mov ds:[si], ax	; Put character in buffer and move to next
+			add si, 2
+
+			loop @@NextChar	; Put one line from buffer on the screen
+			pop cx			; LOAD CX
+
+			add di, SCREENSHFT	; Move to next line
+			dec dx
+			jnz @@NextLine	; Do DX times
 
 @@Exit:		ret
 			endp
@@ -357,11 +472,12 @@ InitEdgeLine	proc
 
 ; DATA PART !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 .data
-FrameBuffer:	dw FRAMESIZE dup (0)	; Init to save frame when it's off
-OldScreenInit:	dw FRAMESIZE dup (0)	; Init to save part of screen when frame's on
+FrameBuffer:		dw FRAMESIZE dup (0)	; Buffer to save frame when it's off
+OldScreenBuffer:	dw FRAMESIZE dup (0)	; Buffer to save part of screen when frame's on
 
-RegsZeroLabel:	db "AX=0000BX=0000CX=0000DX=0000"				; Default frame label
-FrameSample:	db 0fh, 07h, 0fh, 07h, ' ', 07h, 0fh, 07h, 0fh	; Frame sample
+RegsZeroLabel:	db "AX=0000BX=0000CX=0000DX=0000DS=0000SI=0000ES=0000DI=0000"
+				db "SS=0000SP=0000BP=0000CS=0000IP=0000"	; Default frame label
+FrameSample:	db 0dah, 0c4h, 0bfh, 0b3h, ' ', 0b3h, 0c0h, 0c4h, 0d9h	; Frame sample
 
 FlagTurnOn db 0d	; Flag = 1 (if frame is opened), = 0 (else)
 FlagInited db 0d	; Flag = 1 (if frame is inited), = 0 (else)
