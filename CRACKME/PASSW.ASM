@@ -97,12 +97,12 @@ CheckPassword   proc
 
 ; DATA PART !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 .data
-PasswordBuffer:     db PASSW_BUFFER_LEN dup (0) ; Buffer to save input data
-CorrectPassword:    db "123456"                 ; Correct password
-
 CorrectMessage:     db "Good job! You got access!", 0ah, '$'    ; Message to print if password was entered correctly
 WrongMessage:       db "Oops, seems you have no access :/", 0ah, '$'
                     ; Message to print if password was entered incorrectly
+
+PasswordBuffer:     db PASSW_BUFFER_LEN dup (0) ; Buffer to save input data
+CorrectPassword:    db "123456"                 ; Correct password
 
 
 
