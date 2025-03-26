@@ -40,7 +40,7 @@ docs:
 clean: clean_obj clean_bin
 
 clean_obj:
-	rm $(MAIN_OBJ_DIR)/*.o
+	-rm $(MAIN_OBJ_DIR)/*.o
 
 clean_bin:
-	rm *.out
+	-rm $(BIN)
