@@ -7,12 +7,11 @@ SRC_DIRS 	 := $(MAIN_SRC_DIR)/ $(wildcard $(MAIN_SRC_DIR)/*/)
 SRC_DIRS 	 := $(SRC_DIRS:%/=%)
 MAIN_OBJ_DIR := object
 OBJ_DIRS 	 := $(SRC_DIRS:$(MAIN_SRC_DIR)%=$(MAIN_OBJ_DIR)%)
-RES_DIR      := test_results
 
 SOURCES  := $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.cpp))
 INCLUDES := $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.h))
 OBJECTS  := $(SOURCES:$(MAIN_SRC_DIR)/%.cpp=$(MAIN_OBJ_DIR)/%.o)
-BIN      := tests.out
+BIN      := crack
 
 DOCS_NAME := docs_config
 
@@ -31,11 +30,8 @@ $(OBJECTS): $(MAIN_OBJ_DIR)/%.o: $(MAIN_SRC_DIR)/%.cpp $(INCLUDES) | $(OBJ_DIRS)
 $(OBJ_DIRS): %:
 	@mkdir $@
 
-run: $(BIN) | $(RES_DIR)
+run: $(BIN)
 	@./$(BIN)
-
-$(RES_DIR):
-	@mkdir $(RES_DIR)
 
 docs:
 	@doxygen $(DOCS_NAME)
