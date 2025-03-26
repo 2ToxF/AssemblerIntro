@@ -1,9 +1,7 @@
-#include "patcher.h"
+#include "application.h"
 
 
-int main()
+int main(int argc, char* argv[])
 {
-    FilePatch(KNOWN_FILE_NAME);
-
-    return 0;
+    return CrackmeApplication("CrackPassword/CRACKME.COM", &argc, &argv);
 }
