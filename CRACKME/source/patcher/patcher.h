@@ -7,7 +7,7 @@ enum PatchResultType
     UNKNOWN_FILE_NAME,
 };
 
-const char* const KNOWN_FILE_NAME = "CrackPassword/CRACKME.COM";
+const char* const KNOWN_FILE_NAME = "Cracks/CRACKME.COM";
 
 PatchResultType FilePatch(const char* file_name);
 

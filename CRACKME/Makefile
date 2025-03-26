@@ -1,5 +1,5 @@
 CC := g++
-MAIN_FLAGS := -Wall -Wextra -Wpedantic -fpermissive -O2 -DDEBUG -g -fsanitize=address -D_FORTIFY_SOURCE=2
+MAIN_FLAGS := -Wall -Wextra -Wpedantic -fpermissive -O2 -DDEBUG -g -D_FORTIFY_SOURCE=2
 ADD_FLAGS  := $(shell pkg-config --libs --cflags gtk4 gstreamer-1.0)
 
 MAIN_SRC_DIR := source
@@ -40,7 +40,7 @@ docs:
 clean: clean_obj clean_bin
 
 clean_obj:
-	-rm $(MAIN_OBJ_DIR)/*.o
+	-rm -r $(MAIN_OBJ_DIR)/*
 
 clean_bin:
 	-rm $(BIN)

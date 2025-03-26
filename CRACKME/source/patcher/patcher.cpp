@@ -23,7 +23,10 @@ PatchResultType FilePatch(const char* file_name)
     if (strcmp(file_name, KNOWN_FILE_NAME) != 0)
         return UNKNOWN_FILE_NAME;
 
-    FILE* file_to_crack = fopen(file_name, "r+");
+    FILE* file_to_crack = fopen(file_name, "r+b");
+    if (file_to_crack == NULL)
+        return UNKNOWN_FILE_NAME;
+
     ReplaceFileBytes(file_to_crack);
     return SUCCESS_CRACK;
 }
