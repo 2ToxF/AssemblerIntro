@@ -1,4 +1,2 @@
-*.obj
-*.lst
-*.map
-*.com
+# configs
+.vscode/
